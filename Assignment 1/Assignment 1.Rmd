@@ -1,0 +1,33 @@
+---
+title: "Assignment 1"
+author: "Arnav, Ruini, Siqi"
+date: "25/09/2021"
+output: html_document
+---
+#QUESTION 1
+```{r}
+dirP <- read.csv("/Users/arnavsavla/Desktop/BMEG/BMEG310/BMEG310_2021-main/Assignment 1/data/VCFdata.csv")
+summary(dirP$INDEL)
+```
+#QUESTION 2
+```{r} 
+vec <- which(dirP$DP > 15 & dirP$INDEL == TRUE)
+post<- dirP[vec,"POS"]
+post
+```
+#QUESTION 3
+```{r}
+probability <- 1 - 10^-(dirP$QUAL/10)
+cbind(dirP,probability)
+```
+#QUESTION 4
+```{r}
+nonINDELS <- which(dirP$INDEL == FALSE)
+alts <- dirP[nonINDELS,"ALT"]
+table(alts)
+```
+
+```{r}
+length(which(dirP$INDEL == TRUE& nchar(dirP$ALT)  > nchar(dirP$REF) +2 ) )
+```
+
