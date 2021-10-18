@@ -1,0 +1,335 @@
+---
+title: "Assignment 2 Q1"
+author: "Arnav, Ruini, Siqi"
+date: "16/10/2021"
+output: html_document
+---
+Q1 (done on mac, rest on windows)
+```{r}
+ovarian.dataset <- read.delim("/Users/arnavsavla/Downloads/BMEG310_2021-main/Assignment 2/ovarian.data", sep=",", header = FALSE)
+features <- c("perimeter", "area", "smoothness", "symmetry", "concavity", paste("protein", seq(1, 25), sep=""))
+names(ovarian.dataset) <- c("cell_id", "diagnosis", features) # paste0(features,"_mean"), paste0(features,"_se"), paste0(features,"_worst"))
+```
+1.1
+```{r}
+ovarian.dataset.pca <- prcomp(ovarian.dataset[,3:32],center = TRUE,scale. = TRUE)
+summary(ovarian.dataset.pca)
+##0.4277
+```
+1.2
+```{r}
+##PC9
+```
+1.3
+```{r}
+str(ovarian.dataset)
+ggbiplot(ovarian.dataset.pca,choices=c(1,2), groups=ovarian.dataset$diagnosis)
+```
+1.4
+```{r}
+ggplot(ovarian.dataset, aes(x=area,y=concavity,color= factor(diagnosis)))+geom_point()
+```
+1.5
+```{r}
+#PCA plots arecluttered but provide more information about individual PCAs whereas a regular area vs concavity plot provides a more spread out distribution of points whcoh are more distinct.
+```
+1.6
+```{r}
+boxplot(ovarian.dataset.pca$x)
+```
+Q2
+2.1
+```{r}
+scale <-scale(ovarian.dataset.pca$x)
+kmeans <- kmeans(ovarian.dataset.pca$x, 2)
+kmeans_label <- ifelse(kmeans$cluster == 1, "M", "B")
+true_label <- ovarian.dataset$diagnosis
+
+cm <- as.matrix(table(kmeans_label, true_label))
+
+accuracy <- sum(diag(cm))/sum(cm)
+precision <- cm[2, 2]/(cm[2, 2]+cm[2, 1])
+recall <- cm[2, 2]/(cm[2, 2]+cm[1, 2])
+
+table(ovarian.dataset$diagnosis, kmeans$cluster)
+
+print(accuracy)
+print(precision)
+print(recall)
+
+```
+Accuracy is 0.0784
+Precision is 0.08621
+Recall is 0.1458
+To get the accuracies from each 10 runs from the previous run code into a vector format:
+```{r}
+accuracy <- max(accuracy, 1-accuracy)
+accuracies <- vector()
+```
+
+Q2.2
+```{r}
+for (i in 1:10){
+  kmeans <- kmeans(scale, 2)
+  kmeans_label <- ifelse(kmeans$cluster == 1, "M", "B")
+  true_label <- ovarian.dataset$diagnosis
+  
+  cm <- as.matrix(table(kmeans_label, true_label))
+  
+  accuracy <- sum(diag(cm))/sum(cm)
+  accuracies <- c(accuracies, accuracy)
+}
+
+print("Accuracies across 10 runs is ")
+print(accuracies)
+print("And mean accuracies across 10 runs is ")
+print(mean(accuracies))
+```
+
+As for the mean accuracies over 10 runs:
+```{r}
+for (i in 1:10){
+  kmeans <- kmeans(scale, 2)
+  kmeans_label <- ifelse(kmeans$cluster == 1, "M", "B")
+  true_label <- ovarian.dataset$diagnosis
+  
+  cm <- as.matrix(table(kmeans_label, true_label))
+  
+  accuracy <- sum(diag(cm))/sum(cm)
+  accuracy <- max(accuracy, 1-accuracy)
+  accuracies <- c(accuracies, accuracy)
+}
+
+print("The mean accuracy of accuracies in 10 runs is ")
+print(accuracies)
+```
+
+Q2.3
+```{r}
+top5 <- prcomp(ovarian.dataset[features], center = TRUE,scale. = TRUE, rank. =5)
+
+accuracies <- vector()
+
+for (i in 1:10){
+  kmeans <- kmeans(top5$x, centers=2)
+  kmeans_label <- ifelse(kmeans$cluster == 1, "M", "B")
+  true_label <- ovarian.dataset$diagnosis
+  
+  cm <- as.matrix(table(kmeans_label, true_label))
+  
+  accuracy <- sum(diag(cm))/sum(cm)
+  accuracy <- max(accuracy, 1-accuracy)
+  accuracies <- c(accuracies, accuracy)
+}
+
+print("Accuracies across 10 runs: ")
+print(accuracies)  
+
+print("Mean accuracies across 10 runs: ")
+print(mean(accuracies))  
+```
+
+Q2.4
+
+This creates less accurate results compared to the preiously scaled data because of only partial variation from only using top 5 PCs. The variants impact the data more greatly than in scaled data that
+
+START OF Q3
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE,
+                      eval = TRUE,
+                      message = FALSE, 
+                      warning = FALSE,
+                      comment = NA)
+```
+
+```{r}
+library(ROCR)
+library(randomForest)
+```
+
+
+```{r}
+path = readClipboard()
+setwd(path)
+ovarian.dataset <- read.delim("ovarian.data", sep=",", header = FALSE)
+features <- c("perimeter", "area", "smoothness", "symmetry", "concavity", paste("protein", seq(1, 25), sep=""))
+names(ovarian.dataset) <- c("cell_id", "diagnosis", features) # paste0(features,"_mean"), paste0(features,"_se"), paste0(features,"_worst"))
+```
+
+Transform `diagnosis` to factor type. 
+
+```{r}
+ovarian.dataset$diagnosis = as.factor(ovarian.dataset$diagnosis)
+```
+
+# Q3 CLASSIFICATION
+
+Divide data into training and test sets.
+
+```{r}
+set.seed(123)
+ovarian.dataset.train = ovarian.dataset[sample(nrow(ovarian.dataset))[1:(nrow(ovarian.dataset)/2)],]
+ovarian.dataset.test = ovarian.dataset[sample(nrow(ovarian.dataset))[(nrow(ovarian.dataset)/2):(nrow(ovarian.dataset))],]
+```
+
+## Q3.1
+
+Design a logistic regression classifier to identify (differentiate) benign and malignant cells.
+
+```{r}
+glm.fit = glm(diagnosis~.,data = ovarian.dataset.train[,-1],
+              family = binomial)
+```
+
+Accuracy, precision and recall (M) of the logistic regression classifier on training set.
+
+```{r}
+pred.train = predict(glm.fit,ovarian.dataset.train,type = 'response')
+pred.train = ifelse(pred.train>0.5,
+                    levels(ovarian.dataset.train$diagnosis)[2],
+                    levels(ovarian.dataset.train$diagnosis)[1])
+accuracy = mean(pred.train==ovarian.dataset.train$diagnosis)
+precision = sum(pred.train==levels(ovarian.dataset.train$diagnosis)[2] & ovarian.dataset.train$diagnosis==levels(ovarian.dataset.train$diagnosis)[2])/sum(pred.train==levels(ovarian.dataset.train$diagnosis)[2])
+recall = sum(pred.train==levels(ovarian.dataset.train$diagnosis)[2] & ovarian.dataset.train$diagnosis==levels(ovarian.dataset.train$diagnosis)[2])/sum(ovarian.dataset.train$diagnosis==levels(ovarian.dataset.train$diagnosis)[2])
+result.train = data.frame(accuracy = accuracy,
+                          precision = precision,
+                          recall = recall)
+result.train
+```
+
+Accuracy, precision and recall (M) of the logistic regression classifier on test set.
+
+```{r}
+pred.test = predict(glm.fit,ovarian.dataset.test,type = 'response')
+pred.test = ifelse(pred.test>0.5,
+                    levels(ovarian.dataset.test$diagnosis)[2],
+                    levels(ovarian.dataset.test$diagnosis)[1])
+accuracy = mean(pred.test==ovarian.dataset.test$diagnosis)
+precision = sum(pred.test==levels(ovarian.dataset.test$diagnosis)[2] & ovarian.dataset.test$diagnosis==levels(ovarian.dataset.test$diagnosis)[2])/sum(pred.test==levels(ovarian.dataset.test$diagnosis)[2])
+recall = sum(pred.test==levels(ovarian.dataset.test$diagnosis)[2] & ovarian.dataset.test$diagnosis==levels(ovarian.dataset.test$diagnosis)[2])/sum(ovarian.dataset.test$diagnosis==levels(ovarian.dataset.test$diagnosis)[2])
+result.test = data.frame(accuracy = accuracy,
+                          precision = precision,
+                          recall = recall)
+result.test
+```
+
+* The performance of the classifier on the training set is better than that on test set.
+
+* The logistic regression classifier is fitted on the training set, so its performance on the training set will naturally be better than its performance on the test set. 
+
+## Q3.2
+
+Get the PCs.
+
+```{r}
+pca = prcomp(ovarian.dataset[,-(1:2)], center = TRUE,scale. = TRUE)
+pca = data.frame(pca$x)
+pca = cbind(diagnosis = as.factor(ovarian.dataset$diagnosis),pca)
+set.seed(123)
+pca.train = pca[sample(nrow(pca))[1:(nrow(pca)/2)],1:5]
+pca.test = pca[sample(nrow(pca))[(nrow(pca)/2):(nrow(pca))],1:5]
+```
+
+Repeat the same task as Q3.1. with the top 5 PCs.
+
+```{r}
+glm.fit.new = glm(diagnosis~.,data = pca.train,
+                  family = binomial)
+```
+
+Accuracy, precision and recall (M) of the logistic regression classifier on training set.
+
+```{r}
+pred.train = predict(glm.fit.new,pca.train,type = 'response')
+pred.train = ifelse(pred.train>0.5,
+                    levels(pca.train$diagnosis)[2],
+                    levels(pca.train$diagnosis)[1])
+accuracy = mean(pred.train==pca.train$diagnosis)
+precision = sum(pred.train==levels(pca.train$diagnosis)[2] & pca.train$diagnosis==levels(pca.train$diagnosis)[2])/sum(pred.train==levels(pca.train$diagnosis)[2])
+recall = sum(pred.train==levels(pca.train$diagnosis)[2] & pca.train$diagnosis==levels(pca.train$diagnosis)[2])/sum(pca.train$diagnosis==levels(pca.train$diagnosis)[2])
+result.train = data.frame(accuracy = accuracy,
+                          precision = precision,
+                          recall = recall)
+result.train
+```
+
+Accuracy, precision and recall (M) of the logistic regression classifier on test set.
+
+```{r}
+pred.test = predict(glm.fit.new,pca.test,type = 'response')
+pred.test = ifelse(pred.test>0.5,
+                    levels(pca.test$diagnosis)[2],
+                    levels(pca.test$diagnosis)[1])
+accuracy = mean(pred.test==pca.test$diagnosis)
+precision = sum(pred.test==levels(pca.test$diagnosis)[2] & pca.test$diagnosis==levels(pca.test$diagnosis)[2])/sum(pred.test==levels(pca.test$diagnosis)[2])
+recall = sum(pred.test==levels(pca.test$diagnosis)[2] & pca.test$diagnosis==levels(pca.test$diagnosis)[2])/sum(pca.test$diagnosis==levels(pca.test$diagnosis)[2])
+result.test = data.frame(accuracy = accuracy,
+                          precision = precision,
+                          recall = recall)
+result.test
+```
+
+* The performance of the classifier on the training set is better than that on test set.
+
+* The logistic regression classifier is fitted on the training set, so its performance on the training set will naturally be better than its performance on the test set. 
+
+## Q3.3
+
+* There is not much difference between the results of Q3.1 and Q3.2. Judging from the three evaluation indicators, the results are very close. This is because the five PCs used cover most of the information in the original data, so the performance of the fitted classifier is very close. 
+
+## Q3.4
+
+## Q3.5
+
+```{r}
+pred.prob = predict(glm.fit,ovarian.dataset,type = 'response')
+predict = prediction(pred.prob,ovarian.dataset$diagnosis,
+                     label.ordering = c('B','M'))
+perform = performance(predict,'tpr','fpr')
+plot(perform,colorize = T)
+```
+
+* According to the ROC curve, the two classes overlap at some means.
+
+* According to the ROC curve, we can know that the AUC is high. Thus, the model performance well considering separability.
+
+* The ROC curve is plotted with TPR against the FPR where TPR is on the y-axis and FPR is on the x-axis. By analogy, the Higher the AUC, the better the model is at distinguishing between patients with the disease and no disease. An excellent model has AUC near to the 1 which means it has a good measure of separability. A poor model has an AUC near 0 which means it has the worst measure of separability.  
+
+## Q3.6
+
+Design a Random Forest regression classifier to identify (differentiate) benign and malignant cells.
+
+```{r}
+set.seed(123)
+RF = randomForest(diagnosis~.,data = ovarian.dataset.train[,-1])
+```
+
+Accuracy, precision and recall (M) of the Random Forest regression classifier on training set.
+
+```{r}
+pred.train = predict(RF,ovarian.dataset.train)
+accuracy = mean(pred.train==ovarian.dataset.train$diagnosis)
+precision = sum(pred.train==levels(ovarian.dataset.train$diagnosis)[2] & ovarian.dataset.train$diagnosis==levels(ovarian.dataset.train$diagnosis)[2])/sum(pred.train==levels(ovarian.dataset.train$diagnosis)[2])
+recall = sum(pred.train==levels(ovarian.dataset.train$diagnosis)[2] & ovarian.dataset.train$diagnosis==levels(ovarian.dataset.train$diagnosis)[2])/sum(ovarian.dataset.train$diagnosis==levels(ovarian.dataset.train$diagnosis)[2])
+result.train = data.frame(accuracy = accuracy,
+                          precision = precision,
+                          recall = recall)
+result.train
+```
+
+Accuracy, precision and recall (M) of the Random Forest regression classifier on test set.
+
+```{r}
+pred.test = predict(RF,ovarian.dataset.test)
+accuracy = mean(pred.test==ovarian.dataset.test$diagnosis)
+precision = sum(pred.test==levels(ovarian.dataset.test$diagnosis)[2] & ovarian.dataset.test$diagnosis==levels(ovarian.dataset.test$diagnosis)[2])/sum(pred.test==levels(ovarian.dataset.test$diagnosis)[2])
+recall = sum(pred.test==levels(ovarian.dataset.test$diagnosis)[2] & ovarian.dataset.test$diagnosis==levels(ovarian.dataset.test$diagnosis)[2])/sum(ovarian.dataset.test$diagnosis==levels(ovarian.dataset.test$diagnosis)[2])
+result.test = data.frame(accuracy = accuracy,
+                          precision = precision,
+                          recall = recall)
+result.test
+```
+
+* The performance of the Random Forest classifier is better than that of the logistic regression classifier.
+
+
