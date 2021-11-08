@@ -1,0 +1,188 @@
+---
+title: "assignment3"
+author: "Siqi, Arnav, Ruini"
+date: "30/10/2021"
+output: html_document
+---
+
+# Question 1
+## Q1.1 
+
+```{r}
+read.csv("single_cell_RNA_seq_bam.sam", nrows=73, sep="\t", header=FALSE, fill=TRUE)
+```
+SN reference sequence name. 
+LN reference sequence length. 
+
+## Q1.2
+LN:171031299. The length of X chromosome 171031299 bp. 
+
+
+# Question2
+
+## Q2.1
+```{r}
+sam <- read.csv("single_cell_RNA_seq_bam.sam", sep="\t", header=FALSE, comment.char="@", col.names = paste0("V",seq_len(30)), fill=TRUE)
+sam <- sam[paste0("V",seq_len(11))]
+```
+There are 146346 reads in this BAM file.
+
+## Q2.2
+```{r}
+sam[10:10,]
+```
+We should look at column "V3" to find the chromosome to which the read was aligned. 
+V11 correspond to QUAL field in BAM file. 
+
+## Q2.3
+```{r Xchrom}
+Xchrom <- sam$V3 == "X"
+sum(Xchrom)
+
+```
+There are 5999 reads align to chromosome X.
+
+## Q2.4
+```{r} 
+#Turn Phred+33 ASCII‐encoded quality into Q
+sam_x <- sam[Xchrom,]
+bqXchrom <- sam_x$V11
+bqXvals <- c()
+for (i in 1:length(bqXchrom))
+  bqXvals[i] <- mean(utf8ToInt(bqXchrom[i])-33)
+mean(bqXvals)
+```
+The mean base quality value of all X chromosome aligned reads is 32.72349
+
+
+## Q2.5
+```{r}
+library(ggplot2)
+
+BQ <- matrix(nrow = nrow(sam), ncol = length(utf8ToInt(bqXchrom[i])-33)) #rows = reads, ncol = 58
+for(i in 1:58)
+  for(j in 1:nrow(sam))
+    BQ[j,i] <- utf8ToInt(sam[j,11])[i] -33
+boxplot(BQ, xlab = "Position in the read", ylab = "Base Quality")
+
+```
+The distributions of base qualities are all concentrated between 30-37. 
+
+
+## Q2.6
+Column 'V4' contains the leftmost mapping position of the reads. 
+
+## Q2.7
+```{r}
+chrom9 <- c()
+chrom9 <- sam$V3 == "9" #find chromosome 9
+pos <- sam[chrom9,]
+sum(pos$V4 > 40801273 & pos$V4 < 40805199)
+
+```
+There are 119 reads have their leftmost mapping position aligned within these coordinates.
+
+## Q2.8
+```{r}
+mq = sam$V5 < 50
+sum(mq)
+```
+There are 61527 reads have mapping quality less than 50.
+
+## Q2.9
+```{r}
+m <- subset(sam,sam$V5<50)
+mean(m$V5)
+```
+The mean mapping quality is 0.2418125. 
+
+
+# Question 3
+
+## Q3.1
+```{r}
+vcf_con <- file("RNA_seq_annotated_variants.vcf", open="r")
+vcf_file <- readLines(vcf_con)
+close(vcf_con)
+vcf <- data.frame(vcf_file)
+header <- vcf[grepl("##", vcf$vcf_file), ]
+factor(header)
+variants <- read.csv("RNA_seq_annotated_variants.vcf", skip=length(header), header=TRUE, sep="\t")
+```
+
+## Q3.2
+```{r}
+ref <- (grep("SNVHPOL=16",variants$INFO)) 
+FST <- variants[ref[1],8]
+ANN <- strsplit(FST,";")
+ANN[[1]][3]
+```
+
+## Q3.3
+```{r}
+ID_ANN <- grep("INFO=<ID=ANN", vcf$vcf_file)
+vcf[ID_ANN,]
+strsplit(variants[1,8],",") 
+```
+This variant is intron variant from the ‘Annotation’ field.
+
+## Q3.4
+```{r}
+vcf_con <- file("RNA_seq_annotated_variants.vcf", open="r")
+vcf_file <- readLines(vcf_con)
+close(vcf_con)
+vcf <- data.frame(vcf_file)
+header <- vcf[grepl("##", vcf$vcf_file), ]
+factor(header)
+variants <- read.csv("RNA_seq_annotated_variants.vcf", skip=length(header), header=TRUE, sep="\t")
+ref <- (grep("SNVHPOL=16",variants$INFO)) 
+FST <- variants[ref[683],8]
+ANN <- strsplit(FST,";")
+ANN[[1]][3]
+grep("INFO=<ID=ANN", vcf$vcf_file)
+vcf[grep("INFO=<ID=ANN", vcf$vcf_file),]
+strsplit(variants[683,8],",") 
+```
+This variant will affect gene Rps19. 
+
+## Q3.5
+```{r}
+variant_types <- strsplit(variants[,8],",")
+variant_types <- do.call(c, variant_types)
+
+numintrons <- length(grep("intron_variant", variant_types, value=FALSE))
+numup <- length(grep("upstream_gene_variant", variant_types, value=FALSE))
+numdown <- length(grep("downstream_gene_variant", variant_types, value=FALSE))
+numintergenic <- length(grep("intergenic_region", variant_types, value=FALSE))
+numutr <- length(grep("3_prime_UTR_variant", variant_types, value=FALSE))
+nummissense <- length(grep("missense_variant", variant_types, value=FALSE))
+numsyn <- length(grep("synonymous_variant", variant_types, value=FALSE))
+numsplice <- length(grep("splice_region_variant", variant_types, value=FALSE))
+numnoncod <- length(grep("non_coding_transcript_exon_variant", variant_types, value=FALSE))
+numnoncod
+# Adding up all the different categories gives us more than the length of variant_types (4065) because some variants belong to multiple types
+```
+
+We have 281 variants (in total) per type. 
+
+## Q3.6
+Frameshift variant is an insertion or deletion involving a number of base pairs that is not a multiple of three. It has a greater effect on the resultant protein than a missense variant. Because missense variant just changes an amino acid to another amino acid, but frameshift mutation deletes or inserts of a number of bases that is not a multiple of 3, which will cause lots of amino acid changes.
+
+
+## Q3.7
+
+```{r}
+IV <- grepl("intron_variant", vcf$vcf_file)
+sum(IV)
+
+```
+There are 476 potential intronic variants. 
+
+
+## Q3.8
+```{r}
+#ideas: Get the extron index vector. Loop all the extron variants, check if its annotation has HIGH/MODERATE, record the gene name of it. Unique the names and list them. 
+intron <- grep("intron_variant", vcf$vcf_file)
+
+
+```
