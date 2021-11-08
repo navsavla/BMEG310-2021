@@ -8,3 +8,4 @@ Assignment 2 contributions Summary: Q1: Arnav, Q2: Ruini, Q3: Siqi (18/10/2021)
 Assignment 3 Contributions Summary: 
   Arnav: Q3.1-Q3.6, Q3.8
   Siqi: Q1, Q2, Q3.6-Q3.8
+  Ruini: Q3.6-3.8
