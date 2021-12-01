@@ -9,3 +9,7 @@ Assignment 3 Contributions Summary:
   Arnav: Q3.1-Q3.6, Q3.8
   Siqi: Q1, Q2, Q3.6-Q3.8
   Ruini: Q3.6-3.8
+
+Assignment 4 Contributions Summary:
+  Siqi: Q1, Q2, Q3a
+  Arnav: 
