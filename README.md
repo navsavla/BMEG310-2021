@@ -12,5 +12,5 @@ Assignment 3 Contributions Summary:
 
 Assignment 4 Contributions Summary:
   Siqi: Q1, Q2, Q3a
-  Arnav: Q3, Q4
-  Ruini: Q3, Q5
+  Arnav: Q3, Q4a, Q5 
+  Ruini: Q3, Q4
