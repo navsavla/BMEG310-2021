@@ -1,0 +1,301 @@
+---
+title: "BMEG 310 Final Project"
+author: "Arnav Savla, Siqi Da, Ruini Xiong"
+date: "09/12/2021"
+output: html_document
+---
+
+```{r}
+knitr::opts_chunk$set(echo = TRUE)
+#install.packages(c("cluster", "rattle","NbClust","factoextra"))
+#install.packages('readr', dependencies = TRUE, repos='http://cran.rstudio.com/')
+#install.packages("mclust")
+library(cluster)
+library(rattle)
+library(NbClust)
+library(plyr)
+library(readr)
+library(caret)
+library(factoextra)
+library(mclust)
+library("TCGAbiolinks")
+library("SummarizedExperiment")
+library(dplyr)
+library(ggplot2)
+library("survival")
+library("survminer")
+library(ROCR)
+library(randomForest)
+
+GDCprojects = getGDCprojects()
+GDCprojects[c("project_id", "name")]
+```
+
+```{r}
+TCGAbiolinks:::getProjectSummary("TCGA-LUSC")
+
+```
+
+
+```{r}
+query_TCGA = GDCquery(
+  project = "TCGA-LUSC",
+  data.category = "Transcriptome Profiling", # parameter enforced by GDCquery
+  experimental.strategy = "RNA-Seq",
+  workflow.type = "HTSeq - Counts")
+
+
+```
+```{r}
+lihc_res = getResults(query_TCGA) # make results as table
+# head(lihc_res) # data of the first 6 patients.
+colnames(lihc_res) # columns present in the table
+
+```
+
+```{r}
+GDCdownload(query = query_TCGA)
+```
+
+
+```{r}
+tcga_data = GDCprepare(query_TCGA)
+
+```
+
+```{r}
+
+colnames(colData(tcga_data))
+table(tcga_data@colData$vital_status)
+
+```
+
+```{r}
+table(tcga_data@colData$vital_status)
+table(tcga_data$ajcc_pathologic_stage)
+
+
+```
+
+
+```{r}
+RNAseq_matrix = assay(tcga_data)
+write.csv(RNAseq_matrix,'RNAseq.csv')
+
+```
+
+
+
+# survival analysis
+
+## read data
+```{r}
+clinical_data = read.csv("data_clinical_patient.txt", sep = '\t')
+```
+
+```{r}
+colnames(clinical_data) = clinical_data[4,]
+```
+
+```{r}
+clinical_data = clinical_data[-c(1:4),]
+head(clinical_data)
+```
+
+
+## data which is relevant to survival analysis
+```{r}
+sa_df = clinical_data[,c("PATIENT_ID","AGE","SEX", "AJCC_PATHOLOGIC_TUMOR_STAGE","RACE","OS_STATUS", "OS_MONTHS")]
+# sa: survival analysis
+```
+
+
+```{r}
+sa_df$deceased = sa_df$OS_STATUS == "1:DECEASED" #change to fit for survival package
+```
+
+## sex and survival
+```{r}
+sa_df$OS_MONTHS = as.numeric(sa_df$OS_MONTHS)
+del_sex = which(sa_df$SEX == "")
+data_sex = sa_df[-del_sex,]
+
+fit_sex = survfit(Surv(OS_MONTHS, deceased) ~ SEX, data=data_sex)
+
+ggsurvplot(fit_sex, data=data_sex,xlab = "Overall Survival Time (months)", pval = T, risk.table=T, risk.table.height=0.35)
+```
+
+
+## age and survival
+```{r}
+sa_df$AGE = as.numeric(sa_df$AGE)
+data_age = sa_df[complete.cases(sa_df$AGE),]
+mean(data_age$AGE) # divide the age into 2 groups by mean age, compare survival states at different age
+hist(data_age$AGE) 
+ggplot(data_age, aes(AGE)) + geom_histogram(bins=20)
+data_age$agecat = cut(data_age$AGE, breaks=c(0,67,Inf), labels = c("0 to 67","older than 67"))
+
+head(data_age)
+```
+
+
+```{r}
+fit_age = survfit(Surv(OS_MONTHS, deceased) ~ agecat, data = data_age)
+ggsurvplot(fit_age, data = data_age, xlab = "Overall Survival Time (months)",pval = TRUE, risk.table=T, risk.table.height=0.3)
+
+
+```
+## This gives a P value of 0.33 which indicates no significant difference between the population survival curves or there is no correlation between age and survival. So the null hypothesis is not rejected
+
+
+
+
+## race and survival
+
+```{r}
+unique(sa_df$RACE)
+sa_df$new_race = sa_df$RACE
+data_race = sa_df
+```
+
+```{r}
+# replace those with race "" to "others"
+
+data_race[which(data_race$new_race == ""), "new_race"] = "not reported"
+unique(data_race$new_race)
+fit_race = survfit(Surv(OS_MONTHS, deceased) ~ new_race, data=data_race)
+ggsurvplot(fit_race, data = data_race, xlab = "Overall Survival Time (months)",pval = TRUE, risk.table=T, risk.table.height=0.35)
+
+```
+```{r}
+table(data_race$new_race)
+```
+
+## p value is small, reject the null hypothesis. We can suppose that race is related to survival. However, the sample numbers of races differ a lot and most samples are white. So the relation between race and survival still cannot be determined. 
+
+
+## tumor stage and survival
+
+```{r}
+data_stage = sa_df[complete.cases(sa_df$AJCC_PATHOLOGIC_TUMOR_STAGE),]
+table(data_stage$AJCC_PATHOLOGIC_TUMOR_STAGE)
+```
+
+```{r}
+# remove any of the letters "a", "b" or "c", but only if they are at the end
+# of the name, eg "stage iiia" would become simply "stage iii"
+data_stage$AJCC_PATHOLOGIC_TUMOR_STAGE = gsub("[ABC]$", "", data_stage$AJCC_PATHOLOGIC_TUMOR_STAGE)
+```
+
+```{r}
+# we remove those with stage "", since they are unknown
+data_stage[which(data_stage$AJCC_PATHOLOGIC_TUMOR_STAGE == ""), "AJCC_PATHOLOGIC_TUMOR_STAGE"] = NA
+```
+
+```{r}
+# finally, we also remove those with tumor stage 4, since they are too few
+data_stage[which(data_stage$AJCC_PATHOLOGIC_TUMOR_STAGE == "STAGE IV"), "AJCC_PATHOLOGIC_TUMOR_STAGE"] = NA
+table(data_stage$AJCC_PATHOLOGIC_TUMOR_STAGE)
+data_stage$stage = data_stage$AJCC_PATHOLOGIC_TUMOR_STAGE
+```
+
+```{r}
+fit_stage = survfit(Surv(OS_MONTHS, deceased) ~ stage, data=data_stage)
+ggsurvplot(fit_stage, data = data_stage, xlab = "Overall Survival Time (months)",pval = TRUE, risk.table=T, risk.table.height=0.35)
+
+```
+
+## Null hypothesis: there is no difference between the stage survival curves (i.e. the probability of an event occurring at any time point is the same for each population)
+## We get an overall p-value testing the null hypothesis that all the curves are similar at every time point. In this case, the p-value is small that we can reject the null hypothesis. Therefore, tumor stage will affect survival. 
+
+Now trying kmeans clustering with patient data
+```{r}
+
+patient_kmeans_subset <- clinical_data[,c("OS_MONTHS","AGE", "DAYS_LAST_FOLLOWUP", "DFS_MONTHS")]
+patient_kmeans_subset[patient_kmeans_subset == ""] <- NA
+patient_kmeans_subset[is.na(patient_kmeans_subset)] = 0
+k.means.fit <- kmeans(patient_kmeans_subset[, c("OS_MONTHS","AGE", "DAYS_LAST_FOLLOWUP", "DFS_MONTHS")], 2)
+
+clusplot(
+      patient_kmeans_subset[, c("OS_MONTHS","AGE", "DAYS_LAST_FOLLOWUP", "DFS_MONTHS")],
+      k.means.fit$cluster,
+      main = '2D kmeans clustering for OS Months, DFS Months, Age and Days since last followup',
+      color = TRUE,shade = TRUE,labels = 5,lines = 0, xlab = " ", ylab = " ")
+```
+##Null Hypothesis = Variability decreases with more variables taken into account
+##Conclusion = null hypothesis rejected
+
+
+
+##pca on mutation data
+
+Loading mutations dataset
+```{r}
+mutations_data <- read.delim("data_mutations_extended.txt")
+head(mutations_data)
+```
+
+```{r}
+mutations_subset <- mutations_data[,c("t_ref_count","t_alt_count")]
+n <- mutations_data[,"Hugo_Symbol"]
+
+mutations_subset <- as.data.frame(t(mutations_subset))
+colnames(mutations_subset) <- n
+
+str(mutations_subset) # Check the column types
+```
+
+```{r}
+pca <- prcomp(mutations_subset[1:2,], center=TRUE)
+summary(pca)
+```
+##This shows us that PC1 is way more dominant than PC2 and we do not need to observe PC2. Proceed with rotation PC1 to find the Hugo_Symbol that's most important. PC1 is the line in the max variance direction in which the data swarms. Following PC1, find most dominant mutation.
+
+##rotation data from pca, sort the first column to have the highest value first. The mutations are sorted from the most relevant genes for this cancer.
+```{r}
+rotation <- as.data.frame(abs(pca$rotation))
+```
+
+
+##k-means on mutation data
+
+Trying to sort data
+```{r}
+mutations_data <- read.delim("data_mutations_extended.txt")
+head(mutations_data)
+```
+
+```{r}
+mutations_kmeans_subset <- mutations_data[,c("t_ref_count","t_alt_count", "n_ref_count", "n_alt_count", "NCALLERS")]
+
+#nums= mutations_kmeans_subset[, sapply(mutations_kmeans_subset, class) == "numeric"]
+#head(nums)
+#df<-scale(nums)
+k.means.fit <- kmeans(mutations_kmeans_subset[, c("t_ref_count","t_alt_count", "n_ref_count", "n_alt_count", "NCALLERS")], 2)
+
+clusplot(
+      mutations_kmeans_subset[, c("t_ref_count","t_alt_count", "n_ref_count", "n_alt_count", "NCALLERS")],
+      k.means.fit$cluster,
+      main = '2D representation of the kmeans clustering',
+      color = TRUE,shade = TRUE,labels = 5,lines = 0, xlab = "t_ref_count", ylab = "t_alt_count")
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
