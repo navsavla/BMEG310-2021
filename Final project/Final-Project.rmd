@@ -279,10 +279,22 @@ clusplot(
       main = '2D representation of the kmeans clustering',
       color = TRUE,shade = TRUE,labels = 5,lines = 0, xlab = "t_ref_count", ylab = "t_alt_count")
 ```
+```{r}
+clusplot(
+      mutations_kmeans_subset[, c("t_ref_count","t_alt_count")],
+      k.means.fit$cluster,
+      main = '2D representation of the kmeans clustering',
+      color = TRUE,shade = TRUE,labels = 5,lines = 0, xlab = "t_ref_count", ylab = "t_alt_count")
 
+```
 
-
-
+```{r}
+clusplot(
+      mutations_kmeans_subset[, c( "n_ref_count", "n_alt_count")],
+      k.means.fit$cluster,
+      main = '2D representation of the kmeans clustering',
+      color = TRUE,shade = TRUE,labels = 5,lines = 0, xlab = "n_ref_count", ylab = "n_alt_count")
+```
 
 
 
